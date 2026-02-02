@@ -12,8 +12,14 @@ export async function createGame(request: Request, env: Env): Promise<Response> 
     
     const gameId = crypto.randomUUID();
     
-    // 在 TiDB 创建记录
-    await executeUpdate(env, queries.createGame, [gameId, agent_id]);
+    // 尝试写入 TiDB（如果配置了），失败也继续
+    try {
+      if (env.TIDB_HOST) {
+        await executeUpdate(env, queries.createGame, [gameId, agent_id]);
+      }
+    } catch (dbError) {
+      console.warn("TiDB not available, using Durable Objects only:", dbError);
+    }
     
     // 获取 Durable Object
     const roomId = env.GAME_ROOM.idFromName(gameId);
@@ -53,11 +59,13 @@ export async function joinGame(request: Request, env: Env, gameId: string): Prom
       return Response.json({ success: false, error: { code: 1000, message: "缺少agent_id" } }, { status: 400 });
     }
     
-    // 更新 TiDB
-    const result = await executeUpdate(env, queries.joinGame, [agent_id, gameId]);
-    
-    if (result.affectedRows === 0) {
-      return Response.json({ success: false, error: { code: 1001, message: "游戏不存在或已满" } }, { status: 404 });
+    // 尝试更新 TiDB（如果配置了）
+    try {
+      if (env.TIDB_HOST) {
+        await executeUpdate(env, queries.joinGame, [agent_id, gameId]);
+      }
+    } catch (dbError) {
+      console.warn("TiDB not available:", dbError);
     }
     
     // 通知 Durable Object
