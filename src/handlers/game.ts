@@ -1,13 +1,29 @@
 import { Env, ApiResponse, PlayerSide } from "../types";
 import { executeQuery, executeUpdate, queries } from "../db/tidb";
+import { authMiddleware, devModeAuth } from "../middleware/auth";
 
 // 创建游戏
 export async function createGame(request: Request, env: Env): Promise<Response> {
   try {
-    const { agent_id } = await request.json() as { agent_id: string };
+    // 首先从 auth header 获取 agent_id
+    let agent_id: string | undefined;
+    
+    // 尝试从 auth middleware 获取
+    const authResult = await authMiddleware(request, env);
+    if (authResult.authorized && authResult.agentId) {
+      agent_id = authResult.agentId;
+    } else {
+      // 如果 auth 失败，尝试从 body 获取（向后兼容）
+      try {
+        const body = await request.clone().json() as { agent_id?: string };
+        agent_id = body.agent_id;
+      } catch (e) {
+        // body 解析失败，忽略
+      }
+    }
     
     if (!agent_id) {
-      return Response.json({ success: false, error: { code: 1000, message: "缺少agent_id" } }, { status: 400 });
+      return Response.json({ success: false, error: { code: 1000, message: "缺少agent_id，请在Authorization header中提供Bearer token或在body中提供agent_id" } }, { status: 400 });
     }
     
     const gameId = crypto.randomUUID();
@@ -47,20 +63,28 @@ export async function createGame(request: Request, env: Env): Promise<Response> 
 // 加入游戏
 export async function joinGame(request: Request, env: Env, gameId: string): Promise<Response> {
   try {
-    const { agent_id } = await request.json() as { agent_id: string };
+    // 首先从 auth header 获取 agent_id
+    let agent_id: string | undefined;
+    
+    // 尝试从 auth middleware 获取
+    const authResult = await authMiddleware(request, env);
+    if (authResult.authorized && authResult.agentId) {
+      agent_id = authResult.agentId;
+    } else {
+      // 如果 auth 失败，尝试从 body 获取（向后兼容）
+      try {
+        const body = await request.clone().json() as { agent_id?: string };
+        agent_id = body.agent_id;
+      } catch (e) {
+        // body 解析失败，忽略
+      }
+    }
     
     if (!agent_id) {
-      return Response.json({ success: false, error: { code: 1000, message: "缺少agent_id" } }, { status: 400 });
+      return Response.json({ success: false, error: { code: 1000, message: "缺少agent_id，请在Authorization header中提供Bearer token或在body中提供agent_id" } }, { status: 400 });
     }
     
-    // 更新 TiDB
-    const result = await executeUpdate(env, queries.joinGame, [agent_id, gameId]);
-    
-    if (result.affectedRows === 0) {
-      return Response.json({ success: false, error: { code: 1001, message: "游戏不存在或已满" } }, { status: 404 });
-    }
-    
-    // 通知 Durable Object
+    // 先通知 Durable Object（它是真正的游戏状态源）
     const roomId = env.GAME_ROOM.idFromName(gameId);
     const room = env.GAME_ROOM.get(roomId);
     
@@ -74,6 +98,11 @@ export async function joinGame(request: Request, env: Env, gameId: string): Prom
     if (!data.success) {
       return Response.json(data, { status: 400 });
     }
+    
+    // 更新 TiDB（异步，不阻塞）
+    executeUpdate(env, queries.joinGame, [agent_id, gameId]).catch(err => {
+      console.warn("TiDB joinGame update failed:", err);
+    });
     
     return Response.json({
       success: true,

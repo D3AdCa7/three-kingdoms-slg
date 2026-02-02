@@ -53,6 +53,8 @@ export class GameRoom {
           return this.handleGetState(request);
         case "/checkCooldown":
           return this.handleCheckCooldown(request);
+        case "/moveable":
+          return this.handleGetMoveable(request);
         default:
           return new Response("Not found", { status: 404 });
       }
@@ -712,6 +714,54 @@ export class GameRoom {
     // 设置新的冷却时间（5秒）
     await this.state.storage.put(key, now + 5000);
     return Response.json({ allowed: true });
+  }
+
+  // 获取武将可移动范围
+  async handleGetMoveable(request: Request): Promise<Response> {
+    const instanceId = new URL(request.url).searchParams.get("instance_id");
+    
+    if (!instanceId) {
+      return Response.json({ success: false, error: { code: 1010, message: "缺少 instance_id 参数" } });
+    }
+
+    const gameState = await this.loadState();
+    if (!gameState) {
+      return Response.json({ success: false, error: ErrorCodes.GAME_NOT_FOUND });
+    }
+
+    if (gameState.status !== "playing") {
+      return Response.json({ success: false, error: { code: 1008, message: "游戏未在进行中" } });
+    }
+
+    const general = this.findGeneral(instanceId, gameState);
+    if (!general) {
+      return Response.json({ success: false, error: ErrorCodes.INVALID_GENERAL });
+    }
+
+    if (!general.is_alive) {
+      return Response.json({ success: false, error: ErrorCodes.GENERAL_DEAD });
+    }
+
+    // 计算可移动范围
+    const moveableArea = getMoveableArea(general, gameState);
+
+    // 转换为更易用的格式
+    const positions = moveableArea.positions.map(pos => ({
+      x: pos.x,
+      y: pos.y,
+      cost: moveableArea.costs.get(`${pos.x},${pos.y}`) || 0
+    }));
+
+    return Response.json({
+      success: true,
+      data: {
+        instance_id: instanceId,
+        current_position: general.position,
+        has_acted: general.has_acted,
+        moveable_positions: positions,
+        total_positions: positions.length
+      }
+    });
   }
 
   // 查找武将

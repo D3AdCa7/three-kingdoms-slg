@@ -414,6 +414,16 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
       const player = url.searchParams.get("player") as "p1" | "p2" || "p1";
       response = await executeAction(request, env, params.gameId, player);
     }
+    // 可移动范围
+    else if (method === "GET" && matchRoute(pathname, "/api/games/:gameId/moveable")) {
+      const params = matchRoute(pathname, "/api/games/:gameId/moveable")!;
+      const instanceId = url.searchParams.get("instance_id");
+      
+      // 转发到 Durable Object
+      const id = env.GAME_ROOM.idFromName(params.gameId);
+      const stub = env.GAME_ROOM.get(id);
+      response = await stub.fetch(new Request(`http://internal/moveable?instance_id=${instanceId}`));
+    }
     // 404
     else {
       response = Response.json(
