@@ -4,6 +4,7 @@ import { createAgent } from "./middleware/auth";
 import { createGame, joinGame, getLeaderboard, getGameHistory, handleWebSocket } from "./handlers/game";
 import { banGeneral, pickGeneral, deployGenerals, executeAction } from "./handlers/action";
 import { getGameState, getGeneralsList, healthCheck } from "./handlers/query";
+import { executeUpdate, initSQL } from "./db/tidb";
 
 // 导出Durable Object
 export { GameRoom };
@@ -320,6 +321,22 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
     // 健康检查
     if (pathname === "/health") {
       return addCorsHeaders(Response.json({ status: "ok", timestamp: new Date().toISOString() }));
+    }
+
+    // 数据库初始化（仅限开发环境）
+    if (method === "POST" && pathname === "/api/init") {
+      try {
+        // 逐条执行建表语句
+        const statements = initSQL.split(';').filter(s => s.trim());
+        for (const stmt of statements) {
+          if (stmt.trim()) {
+            await executeUpdate(env, stmt, []);
+          }
+        }
+        return addCorsHeaders(Response.json({ success: true, message: "数据库初始化完成" }));
+      } catch (error) {
+        return addCorsHeaders(Response.json({ success: false, error: String(error) }, { status: 500 }));
+      }
     }
 
     // 注册
