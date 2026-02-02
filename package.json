@@ -1,0 +1,21 @@
+{
+  "name": "three-kingdoms-slg",
+  "version": "1.0.0",
+  "description": "三国·夺城记 - Agent SLG游戏后端",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "@tidbcloud/serverless": "^0.2.0",
+    "itty-router": "^4.0.27"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241230.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.0.0",
+    "wrangler": "^3.99.0"
+  }
+}
