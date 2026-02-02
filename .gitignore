@@ -1,1 +1,19 @@
+# 敏感文件
 .env
+.env.*
+*.local
+
+# 依赖
+node_modules/
+
+# Wrangler
+.wrangler/
+.dev.vars
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
